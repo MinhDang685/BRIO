@@ -35,7 +35,7 @@ def base_setting(args):
     args.gold_weight = getattr(args, "gold_weight", 0) # weight for ranking loss on gold summaries
     args.mle_weight = getattr(args, "mle_weight", 1) # weight for mle loss on gold summaries
     args.rank_weight = getattr(args, "rank_weight", 1) # weight for ranking loss on candidate summaries
-    args.model_type = getattr(args, "model_type", "facebook/bart-base") # model type
+    args.model_type = getattr(args, "model_type", "facebook/bart-large-cnn") # model type
     args.warmup_steps = getattr(args, "warmup_steps", 10000) # warmup steps
     args.normalize = getattr(args, "normalize", True) # normalize predicited likelihood
     args.grad_norm = getattr(args, "grad_norm", 0) # gradient norm

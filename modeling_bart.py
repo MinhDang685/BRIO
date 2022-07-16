@@ -49,7 +49,7 @@ from transformers.models.bart.configuration_bart import BartConfig
 
 logger = logging.get_logger(__name__)
 
-_CHECKPOINT_FOR_DOC = "facebook/bart-base"
+_CHECKPOINT_FOR_DOC = "facebook/bart-large-cnn"
 _CONFIG_FOR_DOC = "BartConfig"
 _TOKENIZER_FOR_DOC = "BartTokenizer"
 

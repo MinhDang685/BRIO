@@ -6,7 +6,7 @@ from typing import List
 
 def generate_summaries_cnndm(args):
     device = f"cuda:{args.gpuid}"
-    mname = "facebook/bart-base"
+    mname = "facebook/bart-large-cnn"
     model = BartForConditionalGeneration.from_pretrained(mname).to(device)
     model.eval()
     tokenizer = BartTokenizer.from_pretrained(mname)
