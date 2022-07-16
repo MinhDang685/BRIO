@@ -9,7 +9,7 @@ from compare_mt.rouge.rouge_scorer import RougeScorer
 from transformers import BartTokenizer, PegasusTokenizer
 from utils import Recorder
 from data_utils import to_cuda, collate_mp_brio, BrioDataset
-from torch.utils.data import DataLoader
+from torch.utils.data import DataLoader, Subset
 import torch.distributed as dist
 import torch.multiprocessing as mp
 from functools import partial
@@ -27,7 +27,7 @@ logging.getLogger("transformers.tokenization_utils_fast").setLevel(logging.ERROR
 
 def base_setting(args):
     args.batch_size = getattr(args, 'batch_size', 1) # batch size on one gpu, one step
-    args.epoch = getattr(args, 'epoch', 100) 
+    args.epoch = getattr(args, 'epoch', 1)
     args.report_freq = getattr(args, "report_freq", 100) # report frequency
     args.accumulate_step = getattr(args, "accumulate_step", 32) # accumulate gradients steps
     args.margin = getattr(args, "margin", 0.001) # margin for ranking loss on candidate summaries
@@ -35,7 +35,7 @@ def base_setting(args):
     args.gold_weight = getattr(args, "gold_weight", 0) # weight for ranking loss on gold summaries
     args.mle_weight = getattr(args, "mle_weight", 1) # weight for mle loss on gold summaries
     args.rank_weight = getattr(args, "rank_weight", 1) # weight for ranking loss on candidate summaries
-    args.model_type = getattr(args, "model_type", "facebook/bart-large-cnn") # model type
+    args.model_type = getattr(args, "model_type", "facebook/bart-base") # model type
     args.warmup_steps = getattr(args, "warmup_steps", 10000) # warmup steps
     args.normalize = getattr(args, "normalize", True) # normalize predicited likelihood
     args.grad_norm = getattr(args, "grad_norm", 0) # gradient norm
@@ -359,19 +359,21 @@ def run(rank, args):
     collate_fn = partial(collate_mp_brio, pad_token_id=tok.pad_token_id, is_test=False)
     collate_fn_val = partial(collate_mp_brio, pad_token_id=tok.pad_token_id, is_test=True)
     train_set = BrioDataset(f"./{args.dataset}/{args.datatype}/train", args.model_type, max_len=args.max_len, max_num=args.max_num, total_len=args.total_len, is_pegasus=args.is_pegasus)
+    train_set = Subset(train_set, indices=range(len(train_set) // 1000))
     val_set = BrioDataset(f"./{args.dataset}/{args.datatype}/val", args.model_type, is_test=True, max_len=512, is_sorted=False, max_num=args.max_num, total_len=args.total_len, is_pegasus=args.is_pegasus)
+    val_set = Subset(val_set, indices=range(len(val_set) // 1000))
     if is_mp:
         train_sampler = torch.utils.data.distributed.DistributedSampler(
     	 train_set, num_replicas=world_size, rank=rank, shuffle=True)
         dataloader = DataLoader(train_set, batch_size=args.batch_size, shuffle=False, num_workers=4, collate_fn=collate_fn, sampler=train_sampler)
         val_sampler = torch.utils.data.distributed.DistributedSampler(
     	 val_set, num_replicas=world_size, rank=rank)
-        val_dataloader = DataLoader(val_set, batch_size=1, shuffle=False, num_workers=4, collate_fn=collate_fn_val, sampler=val_sampler)
-        val_gen_dataloader = DataLoader(val_set, batch_size=8, shuffle=False, num_workers=4, collate_fn=collate_fn_val, sampler=val_sampler)
+        val_dataloader = DataLoader(val_set, batch_size=1, shuffle=False, num_workers=1, collate_fn=collate_fn_val, sampler=val_sampler)
+        val_gen_dataloader = DataLoader(val_set, batch_size=1, shuffle=False, num_workers=1, collate_fn=collate_fn_val, sampler=val_sampler)
     else:
-        dataloader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=4, collate_fn=collate_fn)
-        val_dataloader = DataLoader(val_set, batch_size=1, shuffle=False, num_workers=4, collate_fn=collate_fn_val)
-        val_gen_dataloader = DataLoader(val_set, batch_size=8, shuffle=False, num_workers=4, collate_fn=collate_fn_val)
+        dataloader = DataLoader(train_set, batch_size=args.batch_size, shuffle=True, num_workers=1, collate_fn=collate_fn)
+        val_dataloader = DataLoader(val_set, batch_size=1, shuffle=False, num_workers=1, collate_fn=collate_fn_val)
+        val_gen_dataloader = DataLoader(val_set, batch_size=1, shuffle=False, num_workers=1, collate_fn=collate_fn_val)
     # build models
     model_path = args.pretrained if args.pretrained is not None else args.model_type
     model = BRIO(model_path, tok.pad_token_id, is_pegasus=args.is_pegasus)
@@ -384,7 +386,7 @@ def run(rank, args):
             model = nn.parallel.DistributedDataParallel(model.to(gpuid), [gpuid], find_unused_parameters=False)
         else:
             model = model.cuda()
-    model.train()
+    model.train()  # set the model to training mode (opposite with evaluation/interference mode) that enable training mode only features
     # set the model to scoring mode
     if is_mp:
         model.module.scoring_mode()

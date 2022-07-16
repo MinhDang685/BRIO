@@ -6,14 +6,17 @@ from typing import List
 
 def generate_summaries_cnndm(args):
     device = f"cuda:{args.gpuid}"
-    mname = "facebook/bart-large-cnn"
+    mname = "facebook/bart-base"
     model = BartForConditionalGeneration.from_pretrained(mname).to(device)
     model.eval()
     tokenizer = BartTokenizer.from_pretrained(mname)
     max_length = 140
     min_length = 55
     count = 1
-    bsz = 8
+    bsz = 2
+    numberOfOutput = 4
+    num_beams = 16
+    num_beam_groups = 16
     with open(args.src_dir) as source, open(args.tgt_dir, 'w') as fout:
         sline = source.readline().strip().lower()
         slines = [sline]
@@ -22,11 +25,11 @@ def generate_summaries_cnndm(args):
                 print(count, flush=True)
             if count % bsz == 0:
                 with torch.no_grad():
-                    dct = tokenizer.batch_encode_plus(slines, max_length=1024, return_tensors="pt", pad_to_max_length=True, truncation=True)
+                    dct = tokenizer.__call__(slines, max_length=1024, return_tensors="pt", pad_to_max_length=True, truncation=True)
                     summaries = model.generate(
                         input_ids=dct["input_ids"].to(device),
                         attention_mask=dct["attention_mask"].to(device),
-                        num_return_sequences=16, num_beam_groups=16, diversity_penalty=1.0, num_beams=16,
+                        num_return_sequences=numberOfOutput, num_beam_groups=num_beam_groups, diversity_penalty=1.0, num_beams=num_beams,
                         max_length=max_length + 2,  # +2 from original because we start at step=1 and stop before max_length
                         min_length=min_length + 1,  # +1 from original because we start at step=1
                         no_repeat_ngram_size=3,
@@ -46,11 +49,11 @@ def generate_summaries_cnndm(args):
             count += 1
         if slines != []:
             with torch.no_grad():
-                dct = tokenizer.batch_encode_plus(slines, max_length=1024, return_tensors="pt", pad_to_max_length=True, truncation=True)
+                dct = tokenizer.__call__(slines, max_length=1024, return_tensors="pt", pad_to_max_length=True, truncation=True)
                 summaries = model.generate(
                     input_ids=dct["input_ids"].to(device),
                     attention_mask=dct["attention_mask"].to(device),
-                    num_return_sequences=16, num_beam_groups=16, diversity_penalty=1.0, num_beams=16,
+                    num_return_sequences=numberOfOutput, num_beam_groups=num_beam_groups, diversity_penalty=1.0, num_beams=num_beams,
                     max_length=max_length + 2,  # +2 from original because we start at step=1 and stop before max_length
                     min_length=min_length + 1,  # +1 from original because we start at step=1
                     no_repeat_ngram_size=3,
