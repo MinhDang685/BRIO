@@ -5,6 +5,8 @@ import argparse
 import numpy as np
 import os
 import random
+
+import transformers
 from compare_mt.rouge.rouge_scorer import RougeScorer
 from transformers import BartTokenizer, PegasusTokenizer
 from utils import Recorder
@@ -35,7 +37,7 @@ def base_setting(args):
     args.gold_weight = getattr(args, "gold_weight", 0) # weight for ranking loss on gold summaries
     args.mle_weight = getattr(args, "mle_weight", 1) # weight for mle loss on gold summaries
     args.rank_weight = getattr(args, "rank_weight", 1) # weight for ranking loss on candidate summaries
-    args.model_type = getattr(args, "model_type", "facebook/bart-large-cnn") # model type
+    args.model_type = getattr(args, "model_type", "facebook/bart-base") # model type
     args.warmup_steps = getattr(args, "warmup_steps", 10000) # warmup steps
     args.normalize = getattr(args, "normalize", True) # normalize predicited likelihood
     args.grad_norm = getattr(args, "grad_norm", 0) # gradient norm
@@ -71,12 +73,12 @@ def evaluation(args):
     if args.is_pegasus:
         tok = PegasusTokenizer.from_pretrained(args.model_type)
     else:
-        tok = BartTokenizer.from_pretrained(args.model_type)
+        tok = BartTokenizer.fraom_pretrained(args.model_type)
     collate_fn = partial(collate_mp_brio, pad_token_id=tok.pad_token_id, is_test=True)
     test_set = BrioDataset(f"./{args.dataset}/{args.datatype}/test", args.model_type, is_test=True, max_len=512,
      is_sorted=False, max_num=args.max_num, is_untok=True, total_len=args.total_len, is_pegasus=args.is_pegasus)
-    batch_size = 4
-    dataloader = DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=4, collate_fn=collate_fn)
+    batch_size = 1
+    dataloader = DataLoader(test_set, batch_size=batch_size, shuffle=False, num_workers=1, collate_fn=collate_fn)
     # build models
     model_path = args.pretrained if args.pretrained is not None else args.model_type
     model = BRIO(model_path, tok.pad_token_id, args.is_pegasus)
@@ -365,7 +367,7 @@ def run(rank, args):
     if is_mp:
         train_sampler = torch.utils.data.distributed.DistributedSampler(
     	 train_set, num_replicas=world_size, rank=rank, shuffle=True)
-        dataloader = DataLoader(train_set, batch_size=args.batch_size, shuffle=False, num_workers=4, collate_fn=collate_fn, sampler=train_sampler)
+        dataloader = DataLoader(train_set, batch_size=args.batch_size, shuffle=False, num_workers=1, collate_fn=collate_fn, sampler=train_sampler)
         val_sampler = torch.utils.data.distributed.DistributedSampler(
     	 val_set, num_replicas=world_size, rank=rank)
         val_dataloader = DataLoader(val_set, batch_size=1, shuffle=False, num_workers=1, collate_fn=collate_fn_val, sampler=val_sampler)
@@ -396,7 +398,7 @@ def run(rank, args):
         mle_fn = label_smoothing_loss(ignore_index=tok.pad_token_id, epsilon=args.smooth)
     else:
         mle_fn = nn.CrossEntropyLoss(ignore_index=tok.pad_token_id)
-    s_optimizer = optim.Adam(model.parameters())
+    s_optimizer = transformers.Adafactor(model.parameters())
     if is_master:
         recorder.write_config(args, [model], __file__)
     minimum_ranking_loss = 100

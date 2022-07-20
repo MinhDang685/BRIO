@@ -9,7 +9,7 @@ def cnndm_setting(args):
     args.gold_weight = getattr(args, "gold_weight", 0)
     args.mle_weight = getattr(args, "mle_weight", 0.1)
     args.rank_weight = getattr(args, "rank_weight", 10)
-    args.model_type = getattr(args, "model_type", "facebook/bart-large-cnn")
+    args.model_type = getattr(args, "model_type", "facebook/bart-base")
     args.warmup_steps = getattr(args, "warmup_steps", 10000)
     args.normalize = getattr(args, "normalize", True)
     args.grad_norm = getattr(args, "grad_norm", 0)
