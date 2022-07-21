@@ -37,7 +37,7 @@ def base_setting(args):
     args.gold_weight = getattr(args, "gold_weight", 0) # weight for ranking loss on gold summaries
     args.mle_weight = getattr(args, "mle_weight", 1) # weight for mle loss on gold summaries
     args.rank_weight = getattr(args, "rank_weight", 1) # weight for ranking loss on candidate summaries
-    args.model_type = getattr(args, "model_type", "facebook/bart-base") # model type
+    args.model_type = getattr(args, "model_type", "facebook/bart-large-cnn") # model type
     args.warmup_steps = getattr(args, "warmup_steps", 10000) # warmup steps
     args.normalize = getattr(args, "normalize", True) # normalize predicited likelihood
     args.grad_norm = getattr(args, "grad_norm", 0) # gradient norm
@@ -365,11 +365,9 @@ def run(rank, args):
     val_set = BrioDataset(f"./{args.dataset}/{args.datatype}/val", args.model_type, is_test=True, max_len=512, is_sorted=False, max_num=args.max_num, total_len=args.total_len, is_pegasus=args.is_pegasus)
     val_set = Subset(val_set, indices=range(len(val_set) // 1000))
     if is_mp:
-        train_sampler = torch.utils.data.distributed.DistributedSampler(
-    	 train_set, num_replicas=world_size, rank=rank, shuffle=True)
+        train_sampler = torch.utils.data.distributed.DistributedSampler(train_set, num_replicas=world_size, rank=rank, shuffle=True)
         dataloader = DataLoader(train_set, batch_size=args.batch_size, shuffle=False, num_workers=1, collate_fn=collate_fn, sampler=train_sampler)
-        val_sampler = torch.utils.data.distributed.DistributedSampler(
-    	 val_set, num_replicas=world_size, rank=rank)
+        val_sampler = torch.utils.data.distributed.DistributedSampler(val_set, num_replicas=world_size, rank=rank)
         val_dataloader = DataLoader(val_set, batch_size=1, shuffle=False, num_workers=1, collate_fn=collate_fn_val, sampler=val_sampler)
         val_gen_dataloader = DataLoader(val_set, batch_size=1, shuffle=False, num_workers=1, collate_fn=collate_fn_val, sampler=val_sampler)
     else:
@@ -388,7 +386,8 @@ def run(rank, args):
             model = nn.parallel.DistributedDataParallel(model.to(gpuid), [gpuid], find_unused_parameters=False)
         else:
             model = model.cuda()
-    model.train()  # set the model to training mode (opposite with evaluation/interference mode) that enable training mode only features
+
+    model.train()  # set the model to training mode
     # set the model to scoring mode
     if is_mp:
         model.module.scoring_mode()
